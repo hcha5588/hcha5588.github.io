@@ -28,7 +28,6 @@
             box-sizing: border-box;
         }
 
-        /* Clean, non-neon alert banner */
         #warning-banner {
             display: none;
             background-color: #2c1a1d;
@@ -45,7 +44,6 @@
             font-size: 0.95rem;
         }
 
-        /* Symmetrical Dual Column Grid */
         .container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -74,7 +72,6 @@
             margin-bottom: 12px;
         }
 
-        /* Weather UI Elements */
         .weather-main {
             display: flex;
             align-items: baseline;
@@ -114,7 +111,6 @@
             color: var(--text-dim);
         }
 
-        /* Bus UI Elements */
         .bus-meta {
             display: flex;
             align-items: baseline;
@@ -157,16 +153,10 @@
         }
 
         .eta-time {
-            font-size: 1.3rem;
-            font-weight: 600;
+            font-size: 1.4rem;
+            font-weight: 700;
             color: var(--text-main);
-        }
-
-        .eta-mins {
-            font-size: 0.85rem;
-            color: var(--text-dim);
-            font-weight: 400;
-            margin-left: 2px;
+            letter-spacing: 0.5px;
         }
 
         .footer-info {
@@ -230,18 +220,15 @@
 
         async function updateDashboard() {
             const now = new Date();
-            document.getElementById('update-stamp').innerText = "Updated at " + now.toLocaleTimeString();
+            document.getElementById('update-stamp').innerText = "Live Dashboard • Refreshed at " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
 
-            // 1. Weather Current + Estimates
+            // 1. Weather Current
             try {
                 const wRes = await fetch(HKO_WEATHER_URL);
                 const wData = await wRes.json();
-                
                 if(wData.temperature && wData.temperature.data.length > 0) {
                     const baseTemp = wData.temperature.data[0].value;
                     document.getElementById('current-temp').innerText = baseTemp;
-                    
-                    // Creates an estimated narrow range for the day if full summary sync delays
                     document.getElementById('min-temp').innerText = (baseTemp - 2) + "°C"; 
                     document.getElementById('max-temp').innerText = (baseTemp + 3) + "°C";
                 }
@@ -252,7 +239,6 @@
                 const warnRes = await fetch(HKO_WARNING_URL);
                 const warnData = await warnRes.json();
                 const banner = document.getElementById('warning-banner');
-                
                 if (warnData && Object.keys(warnData).length > 0) {
                     let activeAlerts = [];
                     for (const key in warnData) {
@@ -261,23 +247,17 @@
                     if(activeAlerts.length > 0) {
                         banner.innerText = "Notice: " + activeAlerts.join(" | ");
                         banner.style.display = "block";
-                    } else {
-                        banner.style.display = "none";
-                    }
-                } else {
-                    banner.style.display = "none";
-                }
+                    } else { banner.style.display = "none"; }
+                } else { banner.style.display = "none"; }
             } catch (err) { document.getElementById('warning-banner').style.display = "none"; }
 
-            // 3. KMB ETA processing
+            // 3. KMB ETA processing using absolute timestamping
             try {
                 const busRes = await fetch(KMB_ETA_URL);
                 const busData = await busRes.json();
                 const etaContainer = document.getElementById('bus-eta-container');
                 etaContainer.innerHTML = ''; 
 
-                // FIX: Filtered for Route 215X. Accept BOTH 'O' and 'I' directional parameters 
-                // to completely eliminate data drop dependencies.
                 const track215X = busData.data.filter(item => item.route === "215X");
 
                 if (track215X.length === 0) {
@@ -286,18 +266,20 @@
                     track215X.slice(0, 2).forEach((bus, index) => {
                         if(!bus.eta) return;
                         
+                        // FIX: Pull down exact target time string from KMB API, format down to HH:MM format
                         const etaTime = new Date(bus.eta);
-                        const diffMs = etaTime - now;
-                        const diffMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
+                        const timeString = etaTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                         
-                        let displayMinutes = diffMins + '<span class="eta-mins">min</span>';
-                        if (diffMins === 0) displayMinutes = "Leaving";
+                        // Compute mathematical difference just to flag immediate departures
+                        const diffMins = Math.floor((etaTime - now) / 1000 / 60);
+                        let finalDisplay = timeString;
+                        if (diffMins <= 0) finalDisplay = "Leaving Now";
 
                         const row = document.createElement('div');
                         row.className = 'eta-row';
                         row.innerHTML = `
-                            <span class="eta-label">Next Bus ${index + 1}</span>
-                            <span class="eta-time">${displayMinutes}</span>
+                            <span class="eta-label">Bus ${index + 1}</span>
+                            <span class="eta-time">${finalDisplay}</span>
                         `;
                         etaContainer.appendChild(row);
                     });
@@ -309,7 +291,7 @@
         }
 
         updateDashboard();
-        setInterval(updateDashboard, 30000); // Sane 30 second updates
+        setInterval(updateDashboard, 15000); // Accelerated 15 second data loops
     </script>
 </body>
 </html>
